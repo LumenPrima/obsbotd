@@ -1,0 +1,15 @@
+[Unit]
+Description=OBSBOT camera MCP daemon (streamable-http on 127.0.0.1:8626)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/home/millerah/obsbotd/.venv/bin/python -m obsbotd.server
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+# ffplay preview needs the desktop session; harmless when absent.
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=default.target
