@@ -22,6 +22,7 @@ import traceback
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer, Image
+from mcp.server.transport_security import TransportSecuritySettings
 
 from . import protocol as proto
 from .aim import (
@@ -565,12 +566,35 @@ async def obsbot_preview(action: Literal["start", "stop"]) -> dict[str, object]:
     return await _run(work)
 
 
+def _allowed_hosts() -> list[str]:
+    """Host headers accepted by DNS-rebinding protection. Defaults cover the
+    loopback bind plus the docker-bridge names a proxied container connection
+    arrives with; OBSBOTD_ALLOWED_HOSTS (comma-separated host:port) extends
+    the list for other proxy hostnames."""
+    hosts = {
+        f"{HOST}:{PORT}",
+        f"127.0.0.1:{PORT}",
+        f"localhost:{PORT}",
+        f"172.17.0.1:{PORT}",
+        f"host.docker.internal:{PORT}",
+    }
+    extra = os.environ.get("OBSBOTD_ALLOWED_HOSTS", "")
+    hosts.update(h.strip() for h in extra.split(",") if h.strip())
+    return sorted(hosts)
+
+
 def main() -> None:
     """json_response: single JSON-RPC replies come back as plain JSON instead
     of an SSE stream, so naive agents can drive the server with bare HTTP
     POSTs; MCP-native clients accept both per the streamable-http spec."""
+    hosts = _allowed_hosts()
+    security = TransportSecuritySettings(
+        allowed_hosts=hosts,
+        allowed_origins=[f"http://{h}" for h in hosts],
+    )
     mcp.run("streamable-http", host=HOST, port=PORT,
-            stateless_http=True, json_response=True)
+            stateless_http=True, json_response=True,
+            transport_security=security)
 
 
 if __name__ == "__main__":
