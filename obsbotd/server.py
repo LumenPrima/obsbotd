@@ -12,6 +12,7 @@ agents can react ("the camera is currently unplugged") instead of crashing.
 
 from __future__ import annotations
 
+import os
 import json
 import errno
 import atexit
@@ -38,8 +39,8 @@ from .capture import CaptureError, take_snapshot
 from .discovery import CameraUnavailable
 from .record import MAX_CLIP_SECONDS, Preview, record_clip
 
-HOST = "127.0.0.1"
-PORT = 8626
+HOST = os.environ.get("OBSBOTD_HOST", "127.0.0.1")
+PORT = int(os.environ.get("OBSBOTD_PORT", "8626"))
 STEADY_ZOOM_POLL_S = 0.08
 
 mcp = MCPServer(

@@ -147,4 +147,5 @@ systemctl --user restart obsbotd     # cure-all
 journalctl --user -u obsbotd -n 50   # logs
 ```
 
-Source and full protocol documentation: `/home/millerah/obsbotd`.
+Source and full protocol documentation: the obsbotd repository root
+(`docs/spec-*.md` for the reverse-engineered wire protocol).

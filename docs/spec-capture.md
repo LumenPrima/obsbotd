@@ -1,3 +1,9 @@
+> **Provenance**: This document was extracted from the source of
+> [obsbot-mcp](https://www.npmjs.com/package/obsbot-mcp) v0.6.3 (MIT License,
+> Copyright (c) 2026 Michael Jordan) as the reimplementation reference for
+> obsbotd. Protocol constants, hardware measurements, and quirk notes originate
+> from that project's reverse-engineering work.
+
 # Capture & Process-Plumbing Specification (obsbot-mcp v0.6.3)
 
 Derived from `dist/capture/ffmpeg-args.js`, `dist/capture/manager.js`, `dist/mcp/log-sink.js`, `dist/mcp/framing.js`, `dist/index.js`, and `package.json`.

@@ -1,3 +1,9 @@
+> **Provenance**: This document was extracted from the source of
+> [obsbot-mcp](https://www.npmjs.com/package/obsbot-mcp) v0.6.3 (MIT License,
+> Copyright (c) 2026 Michael Jordan) as the reimplementation reference for
+> obsbotd. Protocol constants, hardware measurements, and quirk notes originate
+> from that project's reverse-engineering work.
+
 # OBSBOT Tiny 2 Vendor Wire Protocol — Reimplementation Specification
 
 Extracted from `obsbot-mcp` `dist/codec/{frame,crc,encoding,opcodes,commands,preset,types}.js`. All multi-byte integers on the wire are **little-endian** unless stated otherwise. All hex values below are literal from source.
@@ -778,4 +784,4 @@ Property IDs and auto/manual flag values (constants from `commands.js`):
 | Status snapshot read (§4) | UVC XU **selector 6**, GET_CUR | No | No |
 | Pan/tilt/focus/exposure/white-balance/image props (§7) | UVC standard IAMCameraControl / IAMVideoProcAmp | No | No |
 
-**Source file locations:** `/home/millerah/obsbotmcp/node_modules/obsbot-mcp/dist/codec/{frame,crc,encoding,opcodes,commands,preset,types}.js`
+**Source file locations:** `<obsbot-mcp package root>/dist/codec/{frame,crc,encoding,opcodes,commands,preset,types}.js`

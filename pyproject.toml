@@ -2,10 +2,16 @@
 name = "obsbotd"
 version = "0.1.0"
 description = "OBSBOT camera MCP daemon: single owner, hotplug-aware, honest errors"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "LumenPrima" }]
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.9",
 ]
+
+[project.urls]
+Repository = "https://github.com/LumenPrima/obsbotd"
 
 [project.scripts]
 obsbotd = "obsbotd.server:main"

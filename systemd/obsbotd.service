@@ -4,10 +4,14 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart=/home/millerah/obsbotd/.venv/bin/python -m obsbotd.server
+# %h = your home directory; adjust if you cloned obsbotd elsewhere.
+ExecStart=%h/obsbotd/.venv/bin/python -m obsbotd.server
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1
+# Optional overrides:
+#Environment=OBSBOTD_HOST=127.0.0.1
+#Environment=OBSBOTD_PORT=8626
 
 [Install]
 WantedBy=default.target

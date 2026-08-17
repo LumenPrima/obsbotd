@@ -1,4 +1,10 @@
-# Audit Report — obsbot-mcp specs vs source (`/home/millerah/obsbotmcp/node_modules/obsbot-mcp`)
+> **Provenance**: This document was extracted from the source of
+> [obsbot-mcp](https://www.npmjs.com/package/obsbot-mcp) v0.6.3 (MIT License,
+> Copyright (c) 2026 Michael Jordan) as the reimplementation reference for
+> obsbotd. Protocol constants, hardware measurements, and quirk notes originate
+> from that project's reverse-engineering work.
+
+# Audit Report — obsbot-mcp specs vs source (`<obsbot-mcp package root>`)
 
 **Verification method:** every codec/transport/device/tools/capture file in `dist/` was read in full; the full 444-row opcode table was diffed programmatically against the spec's tables; the CRC check value and both worked frame examples were reproduced by executing the actual codec.
 

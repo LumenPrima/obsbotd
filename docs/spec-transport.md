@@ -1,3 +1,9 @@
+> **Provenance**: This document was extracted from the source of
+> [obsbot-mcp](https://www.npmjs.com/package/obsbot-mcp) v0.6.3 (MIT License,
+> Copyright (c) 2026 Michael Jordan) as the reimplementation reference for
+> obsbotd. Protocol constants, hardware measurements, and quirk notes originate
+> from that project's reverse-engineering work.
+
 # OBSBOT Transport & Device Management Specification — Linux
 
 Derived from the JS layer (`dist/transport/*.js`, `dist/device/*.js`). The native helper binary (`native/linux/helper.c`, prebuilt at `native/prebuilt/linux-<arch>/obsbot-helper`) is the other half of the contract; everything the JS reveals about its internals is captured here. macOS and Windows: identical stdio JSON-RPC protocol driving `obsbot-helper` / `obsbot-helper.exe`; not further specified.

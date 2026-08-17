@@ -1,3 +1,9 @@
+> **Provenance**: This document was extracted from the source of
+> [obsbot-mcp](https://www.npmjs.com/package/obsbot-mcp) v0.6.3 (MIT License,
+> Copyright (c) 2026 Michael Jordan) as the reimplementation reference for
+> obsbotd. Protocol constants, hardware measurements, and quirk notes originate
+> from that project's reverse-engineering work.
+
 # obsbot-mcp Tool-Surface Specification (extracted from `dist/mcp/tools.js`, `dist/mcp/render.js`, `dist/mcp/ready.js`, `dist/mcp/framing.js`, `dist/geometry/aim.js`, `README.md`)
 
 Target hardware: **OBSBOT Tiny 2** (USB vid = Remo, pid `0x3564`/`0xFEF8`). 36 tools as of v0.4.0 (all renamed in that release; no backward-compatible aliases).
