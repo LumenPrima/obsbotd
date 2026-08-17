@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import glob
+import tempfile
 import subprocess
 from datetime import datetime
 from dataclasses import dataclass
@@ -53,6 +54,18 @@ def find_obsbot_mic() -> str | None:
     return None
 
 
+def _record_args(device: str, duration_s: float, mic: str | None, out: str) -> list[str]:
+    args = ["ffmpeg", "-hide_banner", "-loglevel", "warning",
+            "-f", "v4l2", "-input_format", "mjpeg", "-video_size", "1920x1080",
+            "-i", device]
+    if mic:
+        args += ["-f", "alsa", "-i", mic]
+    args += ["-t", str(duration_s), "-c:v", "libx264", "-pix_fmt", "yuv420p"]
+    if mic:
+        args += ["-c:a", "aac"]
+    return args + ["-y", out]
+
+
 def record_clip(device: str, duration_s: float, with_audio: bool = True) -> Clip:
     duration_s = min(float(duration_s), MAX_CLIP_SECONDS)
     if duration_s <= 0:
@@ -62,30 +75,45 @@ def record_clip(device: str, duration_s: float, with_audio: bool = True) -> Clip
     out = os.path.join(OUTPUT_DIR, f"obsbot-{stamp}.mp4")
 
     mic = find_obsbot_mic() if with_audio else None
-    args = ["ffmpeg", "-hide_banner", "-loglevel", "warning",
-            "-f", "v4l2", "-input_format", "mjpeg", "-video_size", "1920x1080",
-            "-i", device]
-    if mic:
-        args += ["-f", "alsa", "-i", mic]
-    args += ["-t", str(duration_s), "-c:v", "libx264", "-pix_fmt", "yuv420p"]
-    if mic:
-        args += ["-c:a", "aac"]
-    args += ["-y", out]
+    attempts = [mic] + ([None] if mic else [])
+    last_err = ""
+    for attempt_mic in attempts:
+        try:
+            proc = subprocess.run(
+                _record_args(device, duration_s, attempt_mic, out),
+                capture_output=True, timeout=duration_s + 30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise CaptureError("ffmpeg recording did not finish in time") from e
+        if proc.returncode == 0 and os.path.exists(out):
+            return Clip(path=out, duration_s=duration_s,
+                        size_bytes=os.path.getsize(out), audio=attempt_mic is not None)
+        last_err = proc.stderr.decode(errors="replace").strip()
+    raise CaptureError(f"recording failed: {last_err or 'no output produced'}")
 
-    try:
-        proc = subprocess.run(args, capture_output=True, timeout=duration_s + 30)
-    except subprocess.TimeoutExpired as e:
-        raise CaptureError("ffmpeg recording did not finish in time") from e
-    if proc.returncode != 0 or not os.path.exists(out):
-        err = proc.stderr.decode(errors="replace").strip()
-        raise CaptureError(f"recording failed: {err or 'no output produced'}")
-    return Clip(path=out, duration_s=duration_s,
-                size_bytes=os.path.getsize(out), audio=mic is not None)
+
+def _display_env() -> dict[str, str] | None:
+    """Environment for a GUI child. Under systemd the daemon has no display
+    variables, so probe for the user's session: a Wayland socket in the
+    runtime dir, else an X socket with the conventional Xauthority."""
+    env = dict(os.environ)
+    if env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"):
+        return env
+    runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    if os.path.exists(os.path.join(runtime, "wayland-0")):
+        env["WAYLAND_DISPLAY"] = "wayland-0"
+        env["XDG_RUNTIME_DIR"] = runtime
+        return env
+    if os.path.exists("/tmp/.X11-unix/X0"):
+        env["DISPLAY"] = ":0"
+        env.setdefault("XAUTHORITY", os.path.expanduser("~/.Xauthority"))
+        return env
+    return None
 
 
 class Preview:
-    """One ffplay window at a time. Needs a display session; the daemon unit
-    passes DISPLAY/WAYLAND_DISPLAY through so this works under systemd too."""
+    """One ffplay window at a time. stderr goes to an unlinked temp file, not
+    a pipe — a pipe nobody drains would eventually block the child."""
 
     def __init__(self) -> None:
         self._proc: subprocess.Popen[bytes] | None = None
@@ -97,22 +125,25 @@ class Preview:
     def start(self, device: str) -> None:
         if self.running:
             raise CaptureError("a preview window is already open")
-        if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        env = _display_env()
+        if env is None:
             raise CaptureError("no display session available for a preview window")
         args = ["ffplay", "-hide_banner", "-loglevel", "warning",
                 "-f", "v4l2", "-input_format", "mjpeg",
                 "-video_size", "1920x1080", "-framerate", "60",
                 "-i", device, "-window_title", "OBSBOT preview"]
-        proc = subprocess.Popen(
-            args, stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-        )
-        try:
-            proc.wait(timeout=1.0)
-        except subprocess.TimeoutExpired:
-            self._proc = proc
-            return
-        err = (proc.stderr.read() if proc.stderr else b"").decode(errors="replace").strip()
+        with tempfile.TemporaryFile() as stderr_file:
+            proc = subprocess.Popen(
+                args, stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=stderr_file, env=env,
+            )
+            try:
+                proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                self._proc = proc
+                return
+            stderr_file.seek(0)
+            err = stderr_file.read().decode(errors="replace").strip()
         raise CaptureError(
             f"preview window failed to open ({err.splitlines()[-1] if err else 'ffplay exited immediately'}) "
             "— is a desktop session active for this user?"

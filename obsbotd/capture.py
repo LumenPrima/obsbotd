@@ -98,11 +98,18 @@ def _scale_jpeg(buf: bytes, width: int, height: int, max_dim: int, quality: int)
 
 
 def take_snapshot(device: str, max_dim: int | None = None, quality: int = 85) -> Snapshot:
-    truncated = 0
+    """A failed grab (ffmpeg could not even probe one frame — seen right after
+    wake, when the stream-on garbage burst is total) consumes a retry exactly
+    like a truncated frame: both are the same transient, differently shaped."""
+    last_error = ""
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        frame = _grab_raw_frame(device)
+        try:
+            frame = _grab_raw_frame(device)
+        except CaptureError as e:
+            last_error = str(e)
+            continue
         if not is_complete_jpeg(frame):
-            truncated += 1
+            last_error = f"truncated MJPEG frame from camera ({len(frame)} bytes)"
             continue
         width, height = jpeg_dimensions(frame)
         if max_dim and max(width, height) > max_dim:
@@ -112,6 +119,6 @@ def take_snapshot(device: str, max_dim: int | None = None, quality: int = 85) ->
                 return Snapshot(jpeg=scaled, width=sw, height=sh, attempts=attempt)
         return Snapshot(jpeg=frame, width=width, height=height, attempts=attempt)
     raise CaptureError(
-        f"{truncated} consecutive frames were truncated — the camera may be "
-        "mid-reset; retry, or power-cycle it if this persists"
+        f"{MAX_ATTEMPTS} consecutive frame grabs failed ({last_error}) — the camera "
+        "may be mid-reset; retry, or check USB bandwidth if this persists"
     )

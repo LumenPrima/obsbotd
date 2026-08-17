@@ -13,8 +13,11 @@ agents can react ("the camera is currently unplugged") instead of crashing.
 from __future__ import annotations
 
 import json
+import errno
+import atexit
 import asyncio
 import time
+import traceback
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer, Image
@@ -47,12 +50,15 @@ mcp = MCPServer(
         "Snapshots auto-wake a sleeping camera. Gimbal control is open-loop on "
         "Linux: obsbot_gimbal_position reports the last-commanded pose, not a "
         "live reading — verify pointing visually with a snapshot. If a tool "
-        "reports camera_present=false, the camera is unplugged; just report that."
+        "reports camera_present=false, the camera is not available right now "
+        "(unplugged or re-enumerating); report that — the next call after a "
+        "replug just works."
     ),
 )
 
 _lock = asyncio.Lock()
 _preview = Preview()
+atexit.register(_preview.stop)
 
 
 def _unavailable(e: Exception) -> dict[str, object]:
@@ -67,18 +73,37 @@ def _disconnected(e: OSError) -> dict[str, object]:
     }
 
 
+_CAMERA_LOSS_ERRNOS = {errno.ENODEV, errno.ENXIO, errno.EIO}
+
+
+def _is_camera_loss(e: OSError) -> bool:
+    """Only device-gone signals map to the unplugged contract. Other OSErrors
+    (missing ffmpeg binary, permission problems, filesystem failures) must
+    NOT masquerade as an unplugged camera."""
+    if e.errno in _CAMERA_LOSS_ERRNOS:
+        return True
+    filename = getattr(e, "filename", None)
+    return isinstance(filename, str) and filename.startswith("/dev/video")
+
+
 async def _run(fn, *args):
-    """Run a blocking camera op off the event loop, holding the camera lock,
-    with unplugged/disconnected errors mapped to the structured contract."""
+    """Run a blocking camera op off the event loop, holding the camera lock.
+    Every failure becomes a structured {ok: false, ...} result — a raw
+    exception must never reach the MCP layer as an opaque tool error."""
     async with _lock:
         try:
             return await asyncio.to_thread(fn, *args)
         except CameraUnavailable as e:
             return _unavailable(e)
-        except OSError as e:
-            return _disconnected(e)
         except (CaptureError, proto.FrameParseError) as e:
             return {"ok": False, "error": str(e)}
+        except OSError as e:
+            if _is_camera_loss(e):
+                return _disconnected(e)
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": f"internal error: {type(e).__name__}: {e}"}
 
 
 def _steady_status(cam: Camera) -> tuple[proto.CameraStatus | None, dict[str, object] | None]:
@@ -115,8 +140,16 @@ def _resolve_magnification(st: proto.CameraStatus) -> tuple[float | None, dict[s
 
 
 def _aim_preconditions(cam: Camera, frame_w: float, frame_h: float) -> tuple[dict[str, object] | None, float, float, float]:
-    """Shared guard chain for aim/fit: 16:9, wake, steady zoom, tracking off,
-    magnification. Returns (refusal, magnification, yaw, pitch)."""
+    """Shared guard chain for aim/fit: frame sanity, 16:9, wake, steady zoom,
+    tracking off, magnification. Returns (refusal, magnification, yaw, pitch)."""
+    if frame_w < 1 or frame_h < 1:
+        return ({
+            "ok": False,
+            "error": (
+                f"frame_width/frame_height must be >= 1 (got {frame_w}x{frame_h}) — "
+                "pass the width/height from the snapshot's metadata block"
+            ),
+        }, 0.0, 0.0, 0.0)
     if not is_16_9(frame_w, frame_h):
         return ({
             "ok": False,
@@ -360,6 +393,8 @@ async def obsbot_zoom_to_fit(
 
     def work() -> dict[str, object]:
         cam = Camera.find()
+        if margin < 0:
+            return {"ok": False, "error": f"margin must be >= 0 (got {margin})"}
         if width <= 0 or height <= 0 or x < 0 or y < 0 or x + width > frame_width or y + height > frame_height:
             return {"ok": False, "error": f"region ({x},{y}) {width}x{height} is not inside the {frame_width}x{frame_height} frame"}
         refusal, magnification, cur_yaw, cur_pitch = _aim_preconditions(cam, frame_width, frame_height)
@@ -422,10 +457,19 @@ async def obsbot_exposure(
 ) -> dict[str, object]:
     """Exposure control (vendor path — the standard UVC exposure control is a
     stub on this camera). level 0 (darkest) to 100 (brightest) applies in
-    manual mode. face_priority weights auto-exposure for a face."""
+    manual mode. face_priority weights auto-exposure for a face and is only
+    valid with mode="auto" (the camera ignores the face-AE write otherwise)."""
 
     def work() -> dict[str, object]:
         cam = Camera.find()
+        if mode == "manual" and face_priority is not None:
+            return {
+                "ok": False,
+                "error": (
+                    "face_priority applies only to auto exposure — the camera ignores the "
+                    "face-AE setting in manual mode. Use mode=\"auto\" or omit face_priority."
+                ),
+            }
         raw = cam.exposure(mode == "manual", max(0.0, min(100.0, level)))
         result: dict[str, object] = {"ok": True, "mode": mode, "level": level, "raw": raw}
         if face_priority is not None:
@@ -495,7 +539,7 @@ async def obsbot_record_clip(duration_s: float = 10, audio: bool = True) -> dict
         result: dict[str, object] = {"ok": True, "path": clip.path, "duration_s": clip.duration_s,
                                      "size_bytes": clip.size_bytes, "audio": clip.audio}
         if audio and not clip.audio:
-            result["note"] = "camera mic not accessible for this user (no /dev/snd permission); clip is silent"
+            result["note"] = "camera mic unavailable (no /dev/snd permission, or device busy); clip is silent"
         return result
 
     return await _run(work)

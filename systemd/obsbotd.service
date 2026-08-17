@@ -8,8 +8,6 @@ ExecStart=/home/millerah/obsbotd/.venv/bin/python -m obsbotd.server
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1
-# ffplay preview needs the desktop session; harmless when absent.
-Environment=DISPLAY=:0
 
 [Install]
 WantedBy=default.target
