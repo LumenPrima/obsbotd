@@ -521,7 +521,11 @@ async def obsbot_preview(action: Literal["start", "stop"]) -> dict[str, object]:
 
 
 def main() -> None:
-    mcp.run("streamable-http", host=HOST, port=PORT, stateless_http=True)
+    """json_response: single JSON-RPC replies come back as plain JSON instead
+    of an SSE stream, so naive agents can drive the server with bare HTTP
+    POSTs; MCP-native clients accept both per the streamable-http spec."""
+    mcp.run("streamable-http", host=HOST, port=PORT,
+            stateless_http=True, json_response=True)
 
 
 if __name__ == "__main__":

@@ -68,6 +68,8 @@ systemctl --user enable --now obsbotd
 ```
 
 Client config (any MCP client): `{"type": "http", "url": "http://127.0.0.1:8626/mcp"}`.
+Non-MCP agents can drive it with bare HTTP POSTs — see `docs/AGENT-GUIDE.md`
+for the full integration guide, tool reference, and usage rules.
 
 ## Tests
 
